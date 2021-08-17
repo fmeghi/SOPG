@@ -28,7 +28,7 @@
 
 
 _Bool socketFlag;
-//volatile sig_atomic_t sigFlag = 0;
+volatile sig_atomic_t sigFlag = 0;
 pthread_mutex_t mutexData = PTHREAD_MUTEX_INITIALIZER;
 int s;
 int newfd;
@@ -43,13 +43,7 @@ pthread_t serialThread;
 void sigint_handler(int sig)
 {
 	//cerrar todo correctamente
-	//sigFlag = 1;
-	serial_close();
-	pthread_cancel(serialThread);
-	close(newfd);
-	close(s);
-	exit(1);
-
+	sigFlag = 1;
 }
 
 void sigint_init(void)
@@ -115,8 +109,8 @@ void* serial_thread (void* arg)
       				perror("Error escribiendo mensaje en socket");
       				exit (1);
         		}
-			pthread_mutex_unlock (&mutexData);
 			}
+			pthread_mutex_unlock (&mutexData);
 		}		
 		
 	    usleep(UART_THREAD_SLEEP);
@@ -130,7 +124,7 @@ void bloquearSign(void)
     int s;
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
-    //sigaddset(&set, SIGUSR1);
+    sigaddset(&set, SIGTERM);
     pthread_sigmask(SIG_BLOCK, &set, NULL);
 }
 
@@ -140,7 +134,7 @@ void desbloquearSign(void)
     int s;
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
-    //sigaddset(&set, SIGUSR1);
+    sigaddset(&set, SIGTERM);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 }
 
@@ -167,7 +161,7 @@ int main(void)
 	printf("Inicio Serial Service\r\n");
 
 
-	while(1)
+	while(sigFlag == 0)
 	{
 		char ipClient[32];
 
@@ -198,7 +192,7 @@ int main(void)
 		socketFlag = 1;	// Indico que la conexión con el socket esta activa
 		pthread_mutex_unlock (&mutexData);
 		
-		while( socketFlag == 1 )
+		while( socketFlag == 1 && sigFlag == 0)
 		{
 			// Funcion de lectura bloqueante
         	n = read(newfd,buffer,128);
@@ -206,6 +200,7 @@ int main(void)
 			{
         		case -1:
                 	perror("Error leyendo mensaje en socket");
+			break;
             	case 0:
 					pthread_mutex_lock (&mutexData);
                 	socketFlag = 0;	// Indico que el socket se desconecto.
@@ -220,7 +215,9 @@ int main(void)
 	    pthread_join (serialThread, NULL);
 		close(newfd);
 	}
-	
+	serial_close();
+	close(s);
+	exit(1);
 	
 
 
